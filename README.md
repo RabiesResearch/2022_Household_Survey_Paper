@@ -1,5 +1,4 @@
 # Socioecological determinants of dog ownership in Mara region, Tanzania
-Authours:
 
 This repository includes the code and de-identified data used to analyse of the socioecological determinants of dog ownership in Mara region, Tanzania
 
