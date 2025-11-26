@@ -292,7 +292,7 @@ plot_3a <- create_gg_hist(CensusData$HH_size,
                      "Humans Per Household")
 
 plot_3b <- create_gg_hist(CensusData$TotalDogs,
-                     seq(-1, 24, by = 1),
+                     seq(-1, 13, by = 1),
                      "Dogs Per Household")
 
 # Combine using patchwork
@@ -637,6 +637,7 @@ nrow(CensusDataOwnedN[which(CensusDataOwnedN$TotalDogs<4),]) / nrow(CensusDataOw
 ###  FIGURE 4  ###
 ##################
 
+
 # Extract model estimates
 dog_ownership_est <- tidy(DogOwnershipModel, conf.int = TRUE, conf.method = "Wald", effects = "fixed") %>%
   mutate(Model = "Dog Ownership")
@@ -651,7 +652,6 @@ combined_est <- bind_rows(dog_ownership_est, dog_ownership_n_est) %>%
 
 
 # Create a nicer label for predictors, handling multi-level factors.
-# For example, change "Land.UseCrops" to "Land Cover: Crops".
 combined_est <- combined_est %>%
   mutate(Predictor = case_when(
     grepl("^Land\\.Use", term) ~ paste("Land Cover:", gsub("Land\\.Use", "", term)),
@@ -662,7 +662,7 @@ combined_est <- combined_est %>%
   ))
 
 
-# Recalculate overlap0 based on exponentiated CIs (whether they include 1)
+# Step 1: Recalculate overlap0 based on exponentiated CIs (whether they include 1)
 combined_est <- combined_est %>%
   mutate(
     # Exponentiate estimates and CIs
@@ -676,34 +676,58 @@ combined_est <- combined_est %>%
 # Swap facet order by redefining Model as a factor
 combined_est$Model <- factor(combined_est$Model,levels = c("Dog Ownership", "Dog Count"))  # Ownership first
 
-# Create the plot
-plot_4 <- ggplot(combined_est, aes(x = estimate_exp, y = Predictor)) +
+# Step 2: Create the plot with corrected aesthetics
+# Create individual plots
+plot_ownership <- combined_est %>%
+  filter(Model == "Dog Ownership") %>%
+  ggplot(aes(x = estimate_exp, y = Predictor)) +
   geom_errorbarh(
-    aes(xmin = conf.low_exp, xmax = conf.high_exp, color = !overlap1),  # Use overlap1
+    aes(xmin = conf.low_exp, xmax = conf.high_exp, color = !overlap1),
     height = 0.2
   ) +
-  geom_point(aes(color = !overlap1), size = 3) +  # Match errorbar colors
+  geom_point(aes(color = !overlap1), size = 3) +
   geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
-  facet_grid(
-    . ~ Model,
-    scales = "free_x",
-    labeller = labeller(Model = c(
-      "Dog Ownership" = "Dog Ownership",
-      "Dog Count" = "Dog Count"
-    ))
+  scale_x_continuous(
+    breaks = seq(0, 2.5, by = 0.5),
+    limits = c(0, 2.5)
   ) +
   scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"), guide = "none") +
-  scale_x_log10(
-    breaks = c(0.1, 0.25, 0.5, 1, 2, 4, 8),
-    labels = c("0.1", "0.25", "0.5", "1", "2", "4", "8")
-  ) +
+  labs(x = "Odds Ratio", title = "Dog Ownership") +
   theme_minimal() +
   theme(
     panel.border = element_rect(color = "black", fill = NA, size = 1),
-    panel.spacing = unit(1, "lines"),
-    axis.text = element_text(size = 10)
+    axis.title.y = element_blank()
+  )
+
+# Right panel: Dog Count
+plot_count <- combined_est %>%
+  filter(Model == "Dog Count") %>%
+  ggplot(aes(x = estimate_exp, y = Predictor)) +
+  geom_errorbarh(
+    aes(xmin = conf.low_exp, xmax = conf.high_exp, color = !overlap1),
+    height = 0.2
   ) +
-  labs(x = "Effect Size (log scale)", y = "Predictor")
+  geom_point(aes(color = !overlap1), size = 3) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
+  scale_x_continuous(
+    breaks = seq(0.75, 1.5, by = 0.25),
+    labels = c("0.75", "1.00", "1.25", "1.5"),
+    limits = c(0.75, 1.3)
+  ) +
+  scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"), guide = "none") +
+  labs(x = "Incidence Rate Ratio", title = "Dog Count") +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# Combine plots
+plot_4 <- plot_ownership + plot_count +
+  plot_layout(nrow = 1) &
+  theme(plot.margin = margin(5.5, 5.5, 5.5, 5.5))
 
 plot_4
 
@@ -872,7 +896,7 @@ combined_hdr <- c(
   w_human_dog_ratio$human_dog_ratio,
   lu_human_dog_ratio$human_dog_ratio
 )
-y_max <- min(150, max(combined_hdr, na.rm = TRUE))  # Cap at HDR=100
+y_max <- min(150, max(combined_hdr, na.rm = TRUE))
 y_limits <- c(1, y_max)
 
 # Create consistent theme
@@ -891,7 +915,7 @@ plot_5a <- ggplot(w_human_dog_ratio, aes(x = Urb_V_Rur, y = human_dog_ratio)) +
     limits = y_limits,
     breaks = log_breaks,
     labels = log_labels,
-    oob = scales::squish  # Show >100 values at top
+    oob = scales::squish
   ) +
   coord_cartesian(ylim = y_limits) +  # Focus on 1-100 range
   labs(y = "Human-to-Dog Ratio (log scale)", x = "District Type") +
